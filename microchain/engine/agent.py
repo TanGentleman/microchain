@@ -43,16 +43,20 @@ class Agent:
             ))
             
     def clean_reply(self, reply:str):
+        # in the future this will be passed function names as a list of strings.
         # reply = reply.replace("\_", "_")
         # reply = reply.strip()
         if reply.startswith('Reasoning("'):
-            reply = reply.split('\n')[0]
-            reply = reply[:reply.rfind('")')+2]
-        # reply = reply[:reply.rfind(")")+1]
-        # Clean reasoning output
-        suffix = reply[-4:]
-        if suffix == '")")':
-            reply = reply[:-2]
+            # reply = reply.split('\n')[0]
+            reply = reply[:reply.find('")')+2]
+        elif False: # These will be custom clauses
+            pass
+        else:
+            # reply = reply[:reply.rfind(")")+1]
+            # Clean reasoning output
+            suffix = reply[-4:]
+            if suffix == '")")':
+                reply = reply[:-2]
         return reply
 
     def stop(self):
