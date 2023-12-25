@@ -81,7 +81,7 @@ class Agent:
             reply = self.clean_reply(reply)
 
             if len(reply) < 2:
-                print(colored("Error: empty reply, aborting", "red"))
+                print(colored("Empty reply: aborting task", "red"))
                 abort = True
                 break
 
@@ -94,7 +94,7 @@ class Agent:
                 temp_messages.append(dict(
                     role="assistant",
                     content=reply
-                    # content='#Error context#\n' + reply + '\n' + 'Please response with a single valid Python command. No explanation or extra text is allowed.'
+                    # content='#Error context#\n' + reply + '\n' + 'Reminder: Output the next step as only an independent function call.'
                 ))
                 temp_messages.append(dict(
                     role="user",
