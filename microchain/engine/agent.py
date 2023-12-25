@@ -1,11 +1,12 @@
 from microchain.engine.function import Function, FunctionResult
 from termcolor import colored
-
+AGENT_MAX_TRIES = 3
+ITERATION_COUNT = 10
 class Agent:
     def __init__(self, llm, engine):
         self.llm = llm
         self.engine = engine
-        self.max_tries = 10
+        self.max_tries = AGENT_MAX_TRIES
         self.prompt = None
         self.bootstrap = []
         self.do_stop = False
@@ -41,10 +42,17 @@ class Agent:
                 content=output
             ))
             
-    def clean_reply(self, reply):
-        reply = reply.replace("\_", "_")
-        reply = reply.strip()
-        reply = reply[:reply.rfind(")")+1]
+    def clean_reply(self, reply:str):
+        # reply = reply.replace("\_", "_")
+        # reply = reply.strip()
+        if reply.startswith('Reasoning("'):
+            reply = reply.split('\n')[0]
+            reply = reply[:reply.rfind('")')+2]
+        # reply = reply[:reply.rfind(")")+1]
+        # Clean reasoning output
+        suffix = reply[-4:]
+        if suffix == '")")':
+            reply = reply[:-2]
         return reply
 
     def stop(self):
@@ -86,6 +94,7 @@ class Agent:
                 temp_messages.append(dict(
                     role="assistant",
                     content=reply
+                    # content='#Error context#\n' + reply + '\n' + 'Please response with a single valid Python command. No explanation or extra text is allowed.'
                 ))
                 temp_messages.append(dict(
                     role="user",
@@ -101,7 +110,7 @@ class Agent:
             output=output,
         )
 
-    def run(self, iterations=10):
+    def run(self, iterations=ITERATION_COUNT):
         if self.prompt is None:
             raise ValueError("You must set a prompt before running the agent")
 
@@ -111,6 +120,7 @@ class Agent:
         self.reset()
         self.build_initial_messages()
 
+        step_count = 0
         for it in range(iterations):
             if self.do_stop:
                 break
@@ -128,5 +138,6 @@ class Agent:
                 role="user",
                 content=step_output["output"]
             ))
+            step_count += 1
             
-        print(colored(f"Finished {iterations} iterations", "green"))
+        print(colored(f"Completed in {step_count} steps", "green"))
