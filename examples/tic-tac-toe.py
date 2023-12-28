@@ -8,9 +8,9 @@ from microchain.functions import Reasoning, Stop
 
 def check_win(board):
     if board.has_won(1):
-        return ". You won!"
+        return "You won!"
     elif board.has_won(2):
-        return ". You lost!"
+        return "You lost!"
     return ""
 
 class State(Function):
@@ -49,7 +49,7 @@ class PlaceMark(Function):
             return f"Placed mark at {x} {y}. Your opponent placed a mark at {move[0]} {move[1]}." + check_win(self.state["board"])
 
         self.engine.stop()
-        return f"Placed mark at {x} {y}." + check_win(self.state["board"]) + ". The game is over"
+        return f"Placed mark at {x} {y}." + check_win(self.state["board"]) + "The game is over"
 
 load_dotenv()
 

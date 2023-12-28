@@ -3,19 +3,19 @@ from microchain import Function
 class Reasoning(Function):
     @property
     def description(self):
-        return "Use this function for your internal reasoning"
+        return "Use this function for your internal reasoning. It should be immediately followed by a function call."
 
     @property
     def example_args(self):
-        return ["The next step to take is..."]
+        return ["'Next, take the sum of the two integers'"]
 
     def __call__(self, reasoning: str):
-        return f"The reasoning has been recorded"
-    
+        return f"Proceed to the next step."
+
 class Stop(Function):
     @property
     def description(self):
-        return "Use this function to stop the program"
+        return "Use this function to stop the program when the goal has been reached."
 
     @property
     def example_args(self):

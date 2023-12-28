@@ -1,0 +1,102 @@
+[
+    {
+        "role": "user",
+        "content": "Act as a calculator. Allowed function schema:\n    #\n    Reasoning(reasoning: str)\nUse this function for your internal reasoning. It should be immediately followed by a function call..\nExample: Reasoning(reasoning='Next, take the sum of the two integers')\n\nStop()\nUse this function to stop the program when the goal has been reached..\nExample: Stop()\n\nSum(a: int, b: int)\nUse Sum(a: int, b: int) to compute the sum of two constants..\nExample: Sum(a=2, b=2)\n\nSubtraction(a: int, b: int)\nUse Subtraction(a: int, b: int) to compute the subtraction of two constants..\nExample: Subtraction(a=2, b=2)\n\nProduct(a: int, b: int)\nUse Product(a: int, b: int) to compute the product of two constants..\nExample: Product(a=2, b=2)\n\nExponent(a: float, b: float)\nUse this function to compute the exponent of two constants..\nExample: Exponent(a=2, b=2)\n\n    #\n    Avoid nested functions. Output the next step as only an independent function call.\n    #\n\n    Evaluate `(2^2*(7^3+4)-1)`\n\n    Valid functions: Reasoning, Stop, Sum, Subtraction, Product, Exponent\n    "
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"My goal is to evaluate the expression correctly using the order of operations. I will then call a valid calculator function.\")"
+    },
+    {
+        "role": "user",
+        "content": "Proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"First, I will calculate the exponent of 7^3 and 2^2.\")"
+    },
+    {
+        "role": "user",
+        "content": "Proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Exponent(a=7, b=3)"
+    },
+    {
+        "role": "user",
+        "content": "343"
+    },
+    {
+        "role": "assistant",
+        "content": "Exponent(a=2, b=2)"
+    },
+    {
+        "role": "user",
+        "content": "4"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"Next, I will calculate the sum of 4 and the result of 7^3.\")"
+    },
+    {
+        "role": "user",
+        "content": "Proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Sum(a=4, b=343)"
+    },
+    {
+        "role": "user",
+        "content": "347"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"Now, I will calculate the product of the result of 2^2 and the result of the previous sum.\")"
+    },
+    {
+        "role": "user",
+        "content": "Proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Product(a=4, b=347)"
+    },
+    {
+        "role": "user",
+        "content": "1388"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"Finally, I will subtract 1 from the result of the previous product.\")"
+    },
+    {
+        "role": "user",
+        "content": "Proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Subtraction(a=1388, b=1)"
+    },
+    {
+        "role": "user",
+        "content": "1387"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"The final answer is 1387.\")"
+    },
+    {
+        "role": "user",
+        "content": "Proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Stop()"
+    },
+    {
+        "role": "user",
+        "content": "The program has been stopped"
+    }
+]

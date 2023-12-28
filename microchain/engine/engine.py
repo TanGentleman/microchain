@@ -47,15 +47,17 @@ class Engine:
         function_args = tree.body[0].value.args
         function_kwargs = tree.body[0].value.keywords
 
+        # Check that all arguments are constants
+        ERROR_MESSAGE = f"Error: Failed function call: `{command}`. Output should be an independent function call, with no nested functions. Please try again."
         for arg in function_args:
             if not isinstance(arg, ast.Constant):
-                return FunctionResult.ERROR, f"Error: the command {command} must be a function call, you cannot use variables. Please try again."
+                return FunctionResult.ERROR, ERROR_MESSAGE + ' Hint: function arg must be a constant.'
 
         for kwarg in function_kwargs:
             if not isinstance(kwarg, ast.keyword):
-                return FunctionResult.ERROR, f"Error: the command {command} must be a function call, you cannot use variables. Please try again."
+                return FunctionResult.ERROR, ERROR_MESSAGE + ' Hint: function kwarg must be a keyword.'
             if not isinstance(kwarg.value, ast.Constant):
-                return FunctionResult.ERROR, f"Error: the command {command} must be a function call, you cannot use variables. Please try again."
+                return FunctionResult.ERROR, ERROR_MESSAGE + ' Hint: function kwarg must be a constant.'
 
         function_args = [arg.value for arg in function_args]
         function_kwargs = {kwarg.arg: kwarg.value.value for kwarg in function_kwargs}
