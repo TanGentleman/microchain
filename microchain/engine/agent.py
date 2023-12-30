@@ -1,17 +1,23 @@
-from microchain.engine.function import Function, FunctionResult
 from termcolor import colored
+from os.path import exists
+from json import dump as json_dump
+
+from microchain.engine.function import Function, FunctionResult
+from microchain.models.llm import LLM
+from microchain.engine.engine import Engine
 AGENT_MAX_TRIES = 3
 MAX_STEPS = 10
 MAX_SESSION_TOKENS = 30000
-MISTRAL_METRICS = True
 class Agent:
-    def __init__(self, llm, engine, max_tries=AGENT_MAX_TRIES, max_steps=MAX_STEPS):
+    def __init__(self, llm: LLM, engine: Engine, max_tries=AGENT_MAX_TRIES, max_steps=MAX_STEPS, session_tokens=MAX_SESSION_TOKENS):
         self.llm = llm
         self.engine = engine
 
         self.max_tries = max_tries
         self.max_steps = max_steps
 
+        self.system_message = None
+        self.example_prompt = None
         self.prompt = None
         self.bootstrap = []
         self.do_stop = False
@@ -19,18 +25,29 @@ class Agent:
         self.reset()
 
         self.total_tokens = 0
+        self.success_step_count = None
+        self.finish_reason = None
+
+        self.max_session_tokens = session_tokens
+
+        self.last_output = None
 
     def reset(self):
         self.history = []
         self.do_stop = False
 
     def build_initial_messages(self):
-        self.history = [
+        self.history = [ # This should be role:"system, <content>:"System instructions"
             dict(
-                role="user",
-                content=self.prompt
-            ),
+                role="system",
+                content=self.system_message
+            )
         ]
+        # if self.example_prompt:
+        #     self.history.append(dict(
+        #         role="user",
+        #         content=self.example_prompt
+        #     ))
         for command in self.bootstrap:
             result, output = self.engine.execute(command)
             if result == FunctionResult.ERROR:
@@ -47,6 +64,10 @@ class Agent:
                 role="user",
                 content=output
             ))
+        self.history.append(dict(
+            role="user",
+            content=self.prompt
+        ))
             
     def clean_reply(self, reply:str):
         # in the future this will be passed function names as a list of strings.
@@ -93,8 +114,8 @@ class Agent:
                 abort = True
                 break
 
-            if self.total_tokens > MAX_SESSION_TOKENS:
-                print(colored(f"Exceeded {MAX_SESSION_TOKENS} tokens. Aborting", "red"))
+            if self.total_tokens > self.max_session_tokens:
+                print(colored(f"Exceeded {self.max_session_tokens} tokens. Aborting", "red"))
                 abort = True
                 break
             
@@ -124,6 +145,7 @@ class Agent:
                 ))
             else:
                 print(colored(output, "green"))
+                self.last_output = output
                 break
         
         return dict(
@@ -137,15 +159,17 @@ class Agent:
         if self.prompt is None:
             raise ValueError("You must set a prompt before running the agent")
 
-        print(colored(f"prompt:\n{self.prompt}", "blue"))
-        print(colored(f"Running {max_steps} steps", "green"))
+        if self.example_prompt:
+            print(colored(f"Example prompt:\n{self.example_prompt}", "blue"))
 
         self.reset()
+        
         self.build_initial_messages()
+        print(colored(f"Prompt:\n{self.prompt}", "blue"))
+        print(colored(f"Running {max_steps} steps", "green"))
 
         step_count = 0
         # finish_reasons = ['Exhausted', 'Aborted', 'Completed']
-        finish_reason = None
         for i in range(max_steps):
             if self.do_stop:
                 break
@@ -153,7 +177,7 @@ class Agent:
             step_output = self.step()
             
             if step_output["abort"]:
-                finish_reason = "Aborted"
+                self.finish_reason = "Aborted"
                 break
             
             # we need to clear cache of old, unhelpful replies.
@@ -167,19 +191,58 @@ class Agent:
             ))
             step_count += 1
             if step_count == max_steps:
-                finish_reason = "Exhausted"
+                self.finish_reason = "Exhausted"
         
-        if finish_reason is None:
-            finish_reason = "Completed"
-        print(colored(f"{finish_reason} in {step_count} steps", "green"))
-        print(colored(f"Total tokens consumed: {self.total_tokens}", "green"))
-        # Input: 0.6€ / 1M tokens | Output: 1.8€ / 1M tokens
-        # At 80/20 split, average is $0.93 per 1M tokens
-        # $0.93
-        if MISTRAL_METRICS:
-            session_cost = round(self.total_tokens / 1000000 * 0.93, 4)
-            print(colored(f"Session cost: ${session_cost}", "green"))
+        if self.finish_reason is None:
+            self.finish_reason = "Completed"
+            self.success_step_count = step_count
+        print(colored(f"{self.finish_reason} in {self.success_step_count} steps", "green"))
+        self.end_run()
+
+    def save_file(self, data):
         # save history to file
-        with open('history.json', 'w') as f:
-            from json import dump as json_dump
-            json_dump(self.history, f, indent=4)
+        history_file = 'history.json'
+        if exists(history_file):
+            index = 1
+            while exists(f'history-{index}.json'):
+                index += 1
+            history_file = f'history-{index}.json'
+
+
+        with open(history_file, 'w') as f:
+            json_dump(data, f, indent=4)
+        
+    def end_run(self):
+        print(colored(f"Total tokens consumed: {self.total_tokens}", "green"))
+        # Costs by default in euro
+        multiplier_euro_to_dollar = 1.1
+        multiplier_charge_for_output = 1.12
+        mistral_input_cost_per_mill = {
+        'mistral-tiny' : 0.14,
+        'mistral-small' : 0.6,
+        'mistral-medium' : 2.5
+        }
+        round_digits = 4
+        model = self.llm.generator.model
+        input_cost = None
+        if model in mistral_input_cost_per_mill:
+            input_cost = mistral_input_cost_per_mill[model]
+        if input_cost:
+            uninflated_price = self.total_tokens / 1000000 * input_cost
+            session_cost = round(uninflated_price * multiplier_euro_to_dollar * multiplier_charge_for_output, round_digits)
+            print(colored(f"Session cost: ${session_cost}", "green"))
+        
+        config_entry = {
+        "configuration": {
+            "max_tries": self.max_tries,
+            "max_steps": self.max_steps,
+            "session_tokens": self.total_tokens,
+        },
+        "prompt": self.prompt,
+        "model": self.llm.generator.model,
+        "finish": f"{self.finish_reason}" + (f" in {self.success_step_count} steps" if self.success_step_count else ""),
+        "final_answer": self.last_output or "N/A"
+        }
+        data = [config_entry] + self.history
+        self.save_file(data)
+
