@@ -6,45 +6,79 @@ from dotenv import load_dotenv
 load_dotenv()
 assert "MISTRAL_API_KEY" in os.environ, "Please set the MISTRAL_API_KEY environment variable"
 MISTRAL_KEY = os.environ["MISTRAL_API_KEY"]
-MISTRAL_MODEL = os.environ.get("MODEL_NAME", "mistral-small")
+# MISTRAL_MODEL = os.environ.get("MODEL_NAME", "mistral-small")
 # MISTRAL_MODEL = 'mistral-medium'
-
-
-MAX_TOKENS = 200
-TEMPERATURE = 0.3
+MISTRAL_MODEL = 'mistral-tiny'
+MAX_TOKENS = 150
+TEMPERATURE = 0
 
 MAX_TRIES = 3
 MAX_STEPS = 20
+MAX_SESSION_TOKENS = 30000
 
-EXAMPLE = """Example: (76*7+3*(5+7))
->> Product(76, 7)
->> Sum(5, 7)
->> Product(3, 12)
->> Sum(532, 36)
-> Stop()"""
+# EXAMPLE = """Example: (76*7+3*(5+7))
+# >> Multiply(76, 7)
+# >> Add(5, 7)
+# >> Multiply(3, 12)
+# >> Add(532, 36)
+# > Stop()"""
 
-# expression = "2² + 3³ + 4⁴"
+# expression = "2**2 + 3**3 + 4**4"
+# expression = "3**3"
 # expression = "1+12+(7+3)*(5+7)"
-# expression = "(3 + 2) × 4 - (6 - 1) + 2²"
-# expression = "88 - 11 + 3 × 4 + (3^2)"
-# expression = "2² + (4-3)³"
+# expression = "2**2 + (4-3)**3"
 # expression = "4+9+(8+1)*(2+8)"
-expression = "2+8+(6+2)*(4+6)"
+# expression = "2+8+(6+2)*(4+6)"
 # expression = "2^2*(7^3+4)-1"
-# expression = "10^2*(7^2-1)-1"
+expression = "10**2*(7-2*1)+1"
 # expression = "(3 + 2) * 4 - 1"
 
 PREFIX = "Evaluate"
 EXPRESSION = expression
 
-QUERY = f"{PREFIX} `({EXPRESSION})`"
-# QUERY = "What is 2² + (4-3)³"
-# QUERY = "What is 2²*(7³+4)-1?"
+# example_expression_old = "3*9-2*1"
+# EXAMPLE_STEPS_OLD = {
+#     1: 'Reasoning("I should break this up as exp1 - exp2")',
+#     2: 'Reasoning("exp1 = 3*9")',
+#     3: 'Multiply(3, 9)',
+#     4: 'Reasoning("exp2 = 2*1")',
+#     5: 'Multiply(2, 1)',
+#     6: 'Reasoning("exp1 - exp2")',
+#     7: 'Subtract(27, 2)',
+# }
 
-class Sum(Function):
+example_expression = "(3*9-2*1)**2"
+# EXAMPLE_STEPS = {
+#     1: f'Reasoning("Evaluating {example_expression} as (exp1 - exp2)**2")',
+#     2: 'Reasoning("exp1 = 3*9")',
+#     3: 'Multiply(3, 9)',
+#     4: 'Reasoning("exp2 = 2*1")',
+#     5: 'Multiply(2, 1)',
+#     6: 'Reasoning("exp1 - exp2")',
+#     7: 'Subtract(27, 2)',
+#     8: 'Reasoning("exp1**2")',
+#     9: 'Power(25, 2)',
+# }
+EXAMPLE_STEPS = {
+    0: 'Reasoning("Evaluating ((3*9-2*1)**2) as exp3 = exp1-exp2, followed by exp3**2")',
+    1: 'PlanSteps("Step 1| Calculate exp1 = 3*9. Step 2| exp2 = 2*1. Step 3| exp3 = exp1 - exp2. Step 4| exp3**2. Then Stop.")',
+    2: 'Reasoning("exp1 = 3*9")',
+    3: 'Multiply(3, 9)',
+    4: 'Reasoning("exp2 = 2*1")',
+    5: 'Multiply(2, 1)',
+    6: 'Reasoning("exp3 = exp1 - exp2")',
+    7: 'Subtract(27, 2)',
+    8: 'Reasoning("exp3**2")',
+    9: 'Power(25, 2)',
+}
+
+PROMPT = f"{PREFIX} `({EXPRESSION})`"
+EXAMPLE_PROMPT = f"{PREFIX} `({example_expression})`"
+
+class Add(Function):
     @property
     def description(self):
-        return "Use Sum(a: int, b: int) to compute the sum of two constants."
+        return "Use Add(a: int, b: int) to compute the sum of two constants."
     
     @property
     def example_args(self):
@@ -53,10 +87,10 @@ class Sum(Function):
     def __call__(self, a: int, b: int):
         return a + b
 
-class Subtraction(Function):
+class Subtract(Function):
     @property
     def description(self):
-        return "Use Subtraction(a: int, b: int) to compute the subtraction of two constants."
+        return "Use Subtract(a: int, b: int) for (a-b)."
     
     @property
     def example_args(self):
@@ -65,10 +99,10 @@ class Subtraction(Function):
     def __call__(self, a: int, b: int):
         return a - b
 
-class Product(Function):
+class Multiply(Function):
     @property
     def description(self):
-        return "Use Product(a: int, b: int) to compute the product of two constants."
+        return "Use Multiply(a: int, b: int) for (a*b)."
     
     @property
     def example_args(self):
@@ -77,37 +111,10 @@ class Product(Function):
     def __call__(self, a: int, b: int):
         return a * b
 
-# class Validate(Function):
-#     @property
-#     def description(self):
-#         return "Use this function to validate an expression against the schema."
-    
-#     @property
-#     def example_args(self):
-#         return ["Sum(2, 2)"]
-    
-#     def __call__(self, expression: str):
-#         approved_functions = ["Sum", "Product", "Subtraction", "Exponent", "Reasoning", "Stop"]
-#         prefix = expression[:expression.find("(")]
-#         if prefix in approved_functions:
-#             return True
-#         return prefix in approved_functions
-
-# class Division(Function):
-#     @property
-#     def description(self):
-#         return "Use this function to compute the division of two constants."
-    
-#     @property
-#     def example_args(self):
-#         return [2, 2]
-    
-#     def __call__(self, a: float, b: float):
-#         return a / b
-class Exponent(Function):
+class Power(Function):
     @property
     def description(self):
-        return "Use this function to compute the exponent of two constants."
+        return "Use Power(a: int, b: int) for (a**b)."
     
     @property
     def example_args(self):
@@ -115,6 +122,20 @@ class Exponent(Function):
     
     def __call__(self, a: float, b: float):
         return a ** b
+
+class PlanSteps(Function):
+    @property
+    def description(self):
+        return "Use this function to plan a sequence of function calls as a list. It should be immediately followed by a function call."
+    
+    @property
+    def example_args(self):
+        # (3*9 - 2*1)**2
+        return [["exp1 = 3*9", "exp2 = 2*1", "exp1 - exp2", "exp3**2"]]
+        # return [["exp1 = Multiply(3, 9)", "exp2 = Multiply(2, 1)", "exp3 = Subtract(exp1, exp2)", "Power(exp3, 2)"]]
+    
+    def __call__(self, steps: list):
+        return f"Proceed to the next step."
 
 def initialize_agent() -> Agent:
     generator = MistralTextGenerator(
@@ -132,29 +153,31 @@ def initialize_agent() -> Agent:
     engine.register(Stop())
 
     # Calculator functions
-    engine.register(Sum())
-    engine.register(Subtraction())
-    engine.register(Product())
-    # engine.register(Division())
-    engine.register(Exponent())
+    engine.register(Add())
+    engine.register(Subtract())
+    engine.register(Multiply())
+    engine.register(Power())
+    engine.register(PlanSteps())
 
-    agent = Agent(llm=llm, engine=engine, max_tries=MAX_TRIES, max_steps=MAX_STEPS)
-    agent.prompt = f"""Act as a calculator. Allowed function schema:
-    #
+    agent = Agent(llm=llm, engine=engine, max_tries=MAX_TRIES, max_steps=MAX_STEPS, session_tokens=MAX_SESSION_TOKENS)
+    agent.system_message = f"""Act as a calculator using a precise function schema.
+    #Allowed Functions:
     {engine.help}
+    
+    #Rules
+    1. Follow the order of operations, where "**" is notation for Power.
+    2. Avoid nested functions. 
+    3. Use reasoning to break up the expression and only use constants.
+    4. Only respond with the next independent function call. 
     #
-    Avoid nested functions. Output the next step as only an independent function call.
-    #
-
-    {QUERY}
-
+    
     Valid functions: {", ".join(engine.functions.keys())}
     """
+    agent.example_prompt = EXAMPLE_PROMPT
     # REASONING_START = "Rewrite the expression for clarity, then begin a sequence of valid calculator functions."
-    REASONING_START = "My goal is to evaluate the expression correctly using the order of operations. I will then call a valid calculator function."
-    agent.bootstrap = [
-        f'Reasoning("{REASONING_START}")',
-    ]
+    # example_step_1 = "My goal is to evaluate the expression correctly using the order of operations. I will then call a valid calculator function."
+    agent.bootstrap = list(EXAMPLE_STEPS.values())
+    agent.prompt = PROMPT
     return agent
 
 def main():
