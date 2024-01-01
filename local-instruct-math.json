@@ -1,0 +1,205 @@
+[
+    {
+        "configuration": {
+            "max_tries": 3,
+            "max_steps": 20,
+            "session_tokens": 13127
+        },
+        "prompt": "Evaluate `(2+8+(6+2)*(4+6))`",
+        "model": "local-model",
+        "finish": "Completed in 12 steps",
+        "final_answer": "The program has been stopped"
+    },
+    {
+        "role": "system",
+        "content": "Act as a calculator using a precise function schema.\n    #Allowed Functions:\n    Reasoning(reasoning: str)\nUse this function for your internal reasoning. It should be immediately followed by a function call..\nExample: Reasoning(reasoning='Next, take the sum of the two integers')\n\nStop()\nUse this function to stop the program when the goal has been reached..\nExample: Stop()\n\nAdd(a: int, b: int)\nUse Add(a: int, b: int) to compute the sum of two constants..\nExample: Add(a=2, b=2)\n\nSubtract(a: int, b: int)\nUse Subtract(a: int, b: int) for (a-b)..\nExample: Subtract(a=2, b=2)\n\nMultiply(a: int, b: int)\nUse Multiply(a: int, b: int) for (a*b)..\nExample: Multiply(a=2, b=2)\n\nPower(a: float, b: float)\nUse Power(a: int, b: int) for (a**b)..\nExample: Power(a=2, b=2)\n\n    \n    #Rules\n    1. Follow the order of operations, where \"**\" is notation for Power.\n    2. Avoid nested functions. \n    3. Only use constants in function calls.\n    4. Only respond with the next independent function call.\n    5. When the goal is reached, call Stop().\n    #\n    \n    Valid functions: Reasoning, Stop, Add, Subtract, Multiply, Power\n    "
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"Now planning steps for ((3*9-2*1)**2).\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"Plan: Step 1| exp1 = 3*9. Step 2| exp2 = 2*1. Step 3| exp3 = exp1 - exp2. Step 4| exp3**2. Then Stop.\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp1 = 3*9\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Multiply(3, 9)"
+    },
+    {
+        "role": "user",
+        "content": "27"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp2 = 2*1\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Multiply(2, 1)"
+    },
+    {
+        "role": "user",
+        "content": "2"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp3 = exp1 - exp2\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Subtract(27, 2)"
+    },
+    {
+        "role": "user",
+        "content": "25"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp3**2\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Power(25, 2)"
+    },
+    {
+        "role": "user",
+        "content": "625"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"Final answer: 625\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "user",
+        "content": "Evaluate `(2+8+(6+2)*(4+6))`"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"Plan: Step 1| exp1 = 2+8. Step 2| exp2 = 6+2. Step 3| exp3 = exp2 * (4+6). Step 4| exp4 = exp1 + exp3. Then Stop.\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp1 = 2+8\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Add(2, 8)"
+    },
+    {
+        "role": "user",
+        "content": "10"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp2 = 6+2\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Add(6, 2)"
+    },
+    {
+        "role": "user",
+        "content": "8"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp3 = exp2 * (4+6)\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp3 = Multiply(8, 10)\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Multiply(8, 10)"
+    },
+    {
+        "role": "user",
+        "content": "80"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"exp4 = exp1 + exp3\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Add(10, 80)"
+    },
+    {
+        "role": "user",
+        "content": "90"
+    },
+    {
+        "role": "assistant",
+        "content": "Reasoning(\"Final answer: 90\")"
+    },
+    {
+        "role": "user",
+        "content": "Break down expressions if needed, then proceed to the next step."
+    },
+    {
+        "role": "assistant",
+        "content": "Stop()"
+    },
+    {
+        "role": "user",
+        "content": "The program has been stopped"
+    }
+]
