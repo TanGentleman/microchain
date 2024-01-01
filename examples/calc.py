@@ -1,14 +1,25 @@
 import os
 
-from microchain import MistralTextGenerator, LLM, Function, Engine, Agent
+from microchain import MistralChatGenerator, LLM, Function, Engine, Agent
 from microchain.functions import Reasoning, Stop
 from dotenv import load_dotenv
-load_dotenv()
-assert "MISTRAL_API_KEY" in os.environ, "Please set the MISTRAL_API_KEY environment variable"
-MISTRAL_KEY = os.environ["MISTRAL_API_KEY"]
-# MISTRAL_MODEL = os.environ.get("MODEL_NAME", "mistral-small")
-# MISTRAL_MODEL = 'mistral-medium'
-MISTRAL_MODEL = 'mistral-tiny'
+
+from microchain import OpenAIChatGenerator
+MODES = ["mistral", "openai", "local"]
+MODE = MODES[2]
+
+if MODE != "local":
+    load_dotenv()
+    if MODE == "mistral":
+        MISTRAL_KEY = os.environ["MISTRAL_API_KEY"]
+        MISTRAL_MODEL = os.environ.get("MODEL_NAME", "mistral-small")
+    elif MODE == "openai":
+        OPENAI_MODEL = "gpt-3.5-turbo-1106"
+        OPENAI_KEY = os.environ["OPENAI_API_KEY"]
+    else:
+        raise ValueError(f"Unknown mode {MODE}. Please use mistral, openai, or local.")
+
+LOCAL_BASE_URL = "http://localhost:1234/v1"
 MAX_TOKENS = 150
 TEMPERATURE = 0
 
@@ -16,52 +27,23 @@ MAX_TRIES = 3
 MAX_STEPS = 20
 MAX_SESSION_TOKENS = 30000
 
-# EXAMPLE = """Example: (76*7+3*(5+7))
-# >> Multiply(76, 7)
-# >> Add(5, 7)
-# >> Multiply(3, 12)
-# >> Add(532, 36)
-# > Stop()"""
-
 # expression = "2**2 + 3**3 + 4**4"
-# expression = "3**3"
+# expression = "3**3-4"
 # expression = "1+12+(7+3)*(5+7)"
 # expression = "2**2 + (4-3)**3"
 # expression = "4+9+(8+1)*(2+8)"
 # expression = "2+8+(6+2)*(4+6)"
-# expression = "2^2*(7^3+4)-1"
 expression = "10**2*(7-2*1)+1"
 # expression = "(3 + 2) * 4 - 1"
+# expression = "(5*4)**3"
 
 PREFIX = "Evaluate"
 EXPRESSION = expression
 
-# example_expression_old = "3*9-2*1"
-# EXAMPLE_STEPS_OLD = {
-#     1: 'Reasoning("I should break this up as exp1 - exp2")',
-#     2: 'Reasoning("exp1 = 3*9")',
-#     3: 'Multiply(3, 9)',
-#     4: 'Reasoning("exp2 = 2*1")',
-#     5: 'Multiply(2, 1)',
-#     6: 'Reasoning("exp1 - exp2")',
-#     7: 'Subtract(27, 2)',
-# }
-
 example_expression = "(3*9-2*1)**2"
-# EXAMPLE_STEPS = {
-#     1: f'Reasoning("Evaluating {example_expression} as (exp1 - exp2)**2")',
-#     2: 'Reasoning("exp1 = 3*9")',
-#     3: 'Multiply(3, 9)',
-#     4: 'Reasoning("exp2 = 2*1")',
-#     5: 'Multiply(2, 1)',
-#     6: 'Reasoning("exp1 - exp2")',
-#     7: 'Subtract(27, 2)',
-#     8: 'Reasoning("exp1**2")',
-#     9: 'Power(25, 2)',
-# }
 EXAMPLE_STEPS = {
-    0: 'Reasoning("Evaluating ((3*9-2*1)**2) as exp3 = exp1-exp2, followed by exp3**2")',
-    1: 'PlanSteps("Step 1| Calculate exp1 = 3*9. Step 2| exp2 = 2*1. Step 3| exp3 = exp1 - exp2. Step 4| exp3**2. Then Stop.")',
+    0: 'Reasoning("Now planning steps for ((3*9-2*1)**2).")',
+    1: 'Reasoning("Plan: Step 1| exp1 = 3*9. Step 2| exp2 = 2*1. Step 3| exp3 = exp1 - exp2. Step 4| exp3**2. Then Stop.")',
     2: 'Reasoning("exp1 = 3*9")',
     3: 'Multiply(3, 9)',
     4: 'Reasoning("exp2 = 2*1")',
@@ -70,10 +52,37 @@ EXAMPLE_STEPS = {
     7: 'Subtract(27, 2)',
     8: 'Reasoning("exp3**2")',
     9: 'Power(25, 2)',
+    10: 'Reasoning("Final answer: 625")'
 }
 
 PROMPT = f"{PREFIX} `({EXPRESSION})`"
 EXAMPLE_PROMPT = f"{PREFIX} `({example_expression})`"
+
+def get_generator():
+    if MODE == "mistral":
+        return MistralChatGenerator(
+            model = MISTRAL_MODEL,
+            api_key=MISTRAL_KEY,
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+        )
+    elif MODE == "openai":
+        return OpenAIChatGenerator(
+            model = OPENAI_MODEL,
+            api_key=OPENAI_KEY,
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+        )
+    elif MODE == "local":
+        return OpenAIChatGenerator(
+            model = "local-model",
+            api_key="not-needed",
+            api_base=LOCAL_BASE_URL,
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+        )
+    raise ValueError(f"Unknown mode {MODE}. Please use mistral, openai, or local.")
+
 
 class Add(Function):
     @property
@@ -123,27 +132,22 @@ class Power(Function):
     def __call__(self, a: float, b: float):
         return a ** b
 
-class PlanSteps(Function):
-    @property
-    def description(self):
-        return "Use this function to plan a sequence of function calls as a list. It should be immediately followed by a function call."
+# class PlanSteps(Function):
+#     @property
+#     def description(self):
+#         return "Use this function to plan a sequence of function calls as a list. It should be immediately followed by a function call."
     
-    @property
-    def example_args(self):
-        # (3*9 - 2*1)**2
-        return [["exp1 = 3*9", "exp2 = 2*1", "exp1 - exp2", "exp3**2"]]
-        # return [["exp1 = Multiply(3, 9)", "exp2 = Multiply(2, 1)", "exp3 = Subtract(exp1, exp2)", "Power(exp3, 2)"]]
+#     @property
+#     def example_args(self):
+#         # (3*9 - 2*1)**2
+#         return [["exp1 = 3*9", "exp2 = 2*1", "exp1 - exp2", "exp3**2"]]
+#         # return [["exp1 = Multiply(3, 9)", "exp2 = Multiply(2, 1)", "exp3 = Subtract(exp1, exp2)", "Power(exp3, 2)"]]
     
-    def __call__(self, steps: list):
-        return f"Proceed to the next step."
+#     def __call__(self, steps: list):
+#         return f"Proceed to the next step."
 
 def initialize_agent() -> Agent:
-    generator = MistralTextGenerator(
-        model = MISTRAL_MODEL,
-        api_key=MISTRAL_KEY,
-        max_tokens=MAX_TOKENS,
-        temperature=TEMPERATURE,
-    )
+    generator = get_generator()
 
     llm = LLM(generator=generator)
 
@@ -157,7 +161,6 @@ def initialize_agent() -> Agent:
     engine.register(Subtract())
     engine.register(Multiply())
     engine.register(Power())
-    engine.register(PlanSteps())
 
     agent = Agent(llm=llm, engine=engine, max_tries=MAX_TRIES, max_steps=MAX_STEPS, session_tokens=MAX_SESSION_TOKENS)
     agent.system_message = f"""Act as a calculator using a precise function schema.
@@ -167,15 +170,14 @@ def initialize_agent() -> Agent:
     #Rules
     1. Follow the order of operations, where "**" is notation for Power.
     2. Avoid nested functions. 
-    3. Use reasoning to break up the expression and only use constants.
-    4. Only respond with the next independent function call. 
+    3. Only use constants in function calls.
+    4. Only respond with the next independent function call.
+    5. When the goal is reached, call Stop().
     #
     
     Valid functions: {", ".join(engine.functions.keys())}
     """
     agent.example_prompt = EXAMPLE_PROMPT
-    # REASONING_START = "Rewrite the expression for clarity, then begin a sequence of valid calculator functions."
-    # example_step_1 = "My goal is to evaluate the expression correctly using the order of operations. I will then call a valid calculator function."
     agent.bootstrap = list(EXAMPLE_STEPS.values())
     agent.prompt = PROMPT
     return agent
