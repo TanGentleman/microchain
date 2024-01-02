@@ -8,18 +8,19 @@ from microchain.engine.engine import Engine
 AGENT_MAX_TRIES = 3
 MAX_STEPS = 10
 MAX_SESSION_TOKENS = 30000
+from time import time
 class Agent:
-    def __init__(self, llm: LLM, engine: Engine, max_tries=AGENT_MAX_TRIES, max_steps=MAX_STEPS, session_tokens=MAX_SESSION_TOKENS):
+    def __init__(self, llm: LLM, engine: Engine, max_tries=AGENT_MAX_TRIES, max_steps=MAX_STEPS, session_tokens=MAX_SESSION_TOKENS, success_fn = lambda _: True):
         self.llm = llm
         self.engine = engine
 
         self.max_tries = max_tries
         self.max_steps = max_steps
 
-        self.system_message = None
-        self.example_prompt = None
-        self.prompt = None
-        self.bootstrap = []
+        self.system_message: str | None = None
+        self.example_prompt: str | None = None
+        self.prompt: str | None = None
+        self.bootstrap: list[str] = []
         self.do_stop = False
         self.engine.bind(self)
         self.reset()
@@ -31,6 +32,7 @@ class Agent:
         self.max_session_tokens = session_tokens
 
         self.last_output = None
+        self.is_valid_goal_value = success_fn
 
     def reset(self):
         self.history = []
@@ -48,8 +50,22 @@ class Agent:
         #         role="user",
         #         content=self.example_prompt
         #     ))
-        for command in self.bootstrap:
-            result, output = self.engine.execute(command)
+        if self.bootstrap:
+            self.apply_commands(self.bootstrap, no_stop=True)
+        self.history.append(dict(
+            role="user",
+            content=self.prompt
+        ))
+    
+    def apply_commands(self, commands: list[str], no_stop = False):
+        for command in commands:
+            result = None
+            output = None
+            if no_stop and command == "Stop()":
+                result = FunctionResult.SUCCESS
+                output = ""
+            else:
+                result, output = self.engine.execute(command)
             if result == FunctionResult.ERROR:
                 raise Exception(f"Your bootstrap commands contain an error. output={output}")
 
@@ -60,37 +76,30 @@ class Agent:
                 role="assistant",
                 content=command
             ))
-            self.history.append(dict(
-                role="user",
-                content=output
-            ))
-        self.history.append(dict(
-            role="user",
-            content=self.prompt
-        ))
-            
+            if output:
+                self.history.append(dict(
+                    role="user",
+                    content=output
+                ))            
     def clean_reply(self, reply:str):
         # in the future this will be passed function names as a list of strings.
-        # reply = reply.replace("\_", "_")
-        # reply = reply.strip()
-        reply = reply.split('\n')[0]
-        if reply.startswith('Reasoning("'):
-            # reply = reply.split('\n')[0]
-            end_index = reply.find('")') + 2
-            reply = reply[:end_index]
-        elif False: # These will be custom clauses
-            pass
-        else:
-            end_index = reply.find(") #") + 1
-            if end_index == 0:
-                end_index = reply.rfind(")") + 1
-            reply = reply[:end_index]
-            # reply = reply[:reply.rfind(")")+1]
-            # Clean reasoning output
-            # suffix = reply[-4:]
-            # if suffix == '")")':
-            #     reply = reply[:-2]
-        return reply
+        for function_name in self.engine.functions:
+            if reply.startswith(function_name):
+                # logic here for reasoning and others
+                if function_name == "PlanSteps":
+                    if self.is_valid_goal_value(reply):
+                        print(f'Got plan! {reply}')
+                        self.last_output = reply
+                        return 'Stop()'
+                    pass
+                    # PlanSteps(["a", "b"]) should become 
+                elif function_name != "Reasoning":
+                    # truncate the string at the first ")"
+                    return reply.split(")", 1)[0] + ")"
+                    
+                return reply
+            continue
+        return 'Reasoning("After following the plan step-by-step, I will call Stop() at the goal.")'
 
     def stop(self):
         self.do_stop = True
@@ -119,11 +128,11 @@ class Agent:
                 abort = True
                 break
             
-            reply, tokens = self.llm(self.history + temp_messages, stop=["\n"])
+            reply, tokens = self.llm(self.history + temp_messages)
             self.total_tokens += tokens
             reply = self.clean_reply(reply)
 
-            if len(reply) < 2:
+            if len(reply) < 1:
                 print(colored("Empty reply: aborting task", "red"))
                 abort = True
                 break
@@ -131,13 +140,14 @@ class Agent:
             print(colored(f">> {reply}", "yellow"))
             
             result, output = self.engine.execute(reply)
+            if type(output) != str:
+                raise ValueError('ERROR: The output from engine.execute must be a string!')
 
             if result == FunctionResult.ERROR:
                 print(colored(output, "red"))
                 temp_messages.append(dict(
                     role="assistant",
                     content=reply
-                    # content='#Error context#\n' + reply + '\n' + 'Reminder: Output the next step as only an independent function call.'
                 ))
                 temp_messages.append(dict(
                     role="user",
@@ -145,7 +155,8 @@ class Agent:
                 ))
             else:
                 print(colored(output, "green"))
-                self.last_output = output
+                if self.is_valid_goal_value(output):
+                    self.last_output = output
                 break
         
         return dict(
@@ -163,6 +174,7 @@ class Agent:
             print(colored(f"Example prompt:\n{self.example_prompt}", "blue"))
 
         self.reset()
+        start_time = time()
         
         self.build_initial_messages()
         print(colored(f"Prompt:\n{self.prompt}", "blue"))
@@ -196,8 +208,11 @@ class Agent:
         if self.finish_reason is None:
             self.finish_reason = "Completed"
             self.success_step_count = step_count
-        print(colored(f"{self.finish_reason} in {self.success_step_count} steps", "green"))
+        
+        end_time = round(time() - start_time,2)
+        print(colored(f"{self.finish_reason} in {self.success_step_count} steps {end_time}s", "green"))
         self.end_run()
+        return self.last_output
 
     def save_file(self, data):
         # save history to file
@@ -208,30 +223,19 @@ class Agent:
                 index += 1
             history_file = f'history-{index}.json'
 
-
-        with open(history_file, 'w') as f:
+        filepath = 'logs/' + history_file
+        with open(filepath, 'w') as f:
             json_dump(data, f, indent=4)
         
     def end_run(self):
         print(colored(f"Total tokens consumed: {self.total_tokens}", "green"))
-        # Costs by default in euro
-        multiplier_euro_to_dollar = 1.1
-        multiplier_charge_for_output = 1.12
-        mistral_input_cost_per_mill = {
-        'mistral-tiny' : 0.14,
-        'mistral-small' : 0.6,
-        'mistral-medium' : 2.5
-        }
-        round_digits = 4
-        model = self.llm.generator.model
-        input_cost = None
-        if model in mistral_input_cost_per_mill:
-            input_cost = mistral_input_cost_per_mill[model]
-        if input_cost:
-            uninflated_price = self.total_tokens / 1000000 * input_cost
-            session_cost = round(uninflated_price * multiplier_euro_to_dollar * multiplier_charge_for_output, round_digits)
+        model_name = self.llm.generator.model
+        session_cost = get_price(model_name, self.total_tokens)
+        if session_cost:
             print(colored(f"Session cost: ${session_cost}", "green"))
-        
+        finish_message = self.finish_reason
+        if self.success_step_count is not None:
+            finish_message += f" in {self.success_step_count} steps"
         config_entry = {
         "configuration": {
             "max_tries": self.max_tries,
@@ -239,10 +243,39 @@ class Agent:
             "session_tokens": self.total_tokens,
         },
         "prompt": self.prompt,
-        "model": self.llm.generator.model,
-        "finish": f"{self.finish_reason}" + (f" in {self.success_step_count} steps" if self.success_step_count else ""),
+        "model": model_name,
+        "finish": finish_message,
         "final_answer": self.last_output or "N/A"
         }
         data = [config_entry] + self.history
         self.save_file(data)
 
+def get_price(model: str, tokens: int) -> float | None:
+    round_digits = 4
+    multiplier_input_ratio = 0.9 # Assume ~10% of the usage is output tokens
+    cost = None
+    # Mistral logic
+    multiplier_euro_to_dollar = 1.1
+    mistral_pricing_per_million = {
+    'mistral-tiny' : (0.14, 0.42),
+    'mistral-small' : (0.6, 1.8),
+    'mistral-medium' : (2.5, 7.5)
+    }
+    # OpenAI logic
+    openai_pricing_per_thousand = {
+    'gpt-4-1106-preview' : (0.01, 0.03),
+    'gpt-4-32k' : (0.01, 0.03),
+    'gpt-4' : (0.03, 0.06),
+    'gpt-3.5-turbo-1106' : (0.001, 0.002),
+    'gpt-3.5-turbo' : (0.003, 0.006)
+    }
+    unadjusted_price = None
+    if model in mistral_pricing_per_million:
+        unadjusted_price = tokens / 1000000 * mistral_pricing_per_million[model][0] * multiplier_euro_to_dollar
+    elif model in openai_pricing_per_thousand:
+        unadjusted_price = tokens / 1000 * openai_pricing_per_thousand[model][0]
+    else:
+        print(f"Model {model} not found in pricing tables")
+        return None
+    cost = round(unadjusted_price * (1/multiplier_input_ratio), round_digits)
+    return cost
