@@ -1,15 +1,14 @@
 import ast
-
 from microchain.engine.function import Function, FunctionResult
 
 class Engine:
-    def __init__(self, state=dict()):
+    def __init__(self, state: dict = dict()):
         self.state = state
-        self.functions = dict()
+        self.functions: dict[str, Function] = dict()
         self.help_called = False
         self.agent = None
     
-    def register(self, function):
+    def register(self, function: Function):
         self.functions[function.name] = function
         function.bind(state=self.state, engine=self)
 
@@ -21,7 +20,7 @@ class Engine:
             raise ValueError("You must bind the engine to an agent before stopping")
         self.agent.stop()
 
-    def execute(self, command):
+    def execute(self, command: str):
         if self.agent is None:
             raise ValueError("You must bind the engine to an agent before executing commands")
         if not self.help_called:
@@ -48,27 +47,47 @@ class Engine:
         function_kwargs = tree.body[0].value.keywords
 
         # Check that all arguments are constants
-        ERROR_MESSAGE = f"Error: Failed function call: `{command}`. Output should be an independent function call, with no nested functions. Please try again."
+        ERROR_MESSAGE = f"Error: Failed function call. Instead, follow the function schema one step at a time."
         for arg in function_args:
             if not isinstance(arg, ast.Constant):
+                if isinstance(arg, ast.UnaryOp) and isinstance(arg.op, ast.USub) and isinstance(arg.operand, ast.Constant):
+                    continue
                 return FunctionResult.ERROR, ERROR_MESSAGE + ' Hint: function arg must be a constant.'
 
         for kwarg in function_kwargs:
             if not isinstance(kwarg, ast.keyword):
                 return FunctionResult.ERROR, ERROR_MESSAGE + ' Hint: function kwarg must be a keyword.'
             if not isinstance(kwarg.value, ast.Constant):
+                if isinstance(kwarg.value, ast.UnaryOp) and isinstance(kwarg.value.op, ast.USub) and isinstance(kwarg.value.operand, ast.Constant):
+                    continue
                 return FunctionResult.ERROR, ERROR_MESSAGE + ' Hint: function kwarg must be a constant.'
 
-        function_args = [arg.value for arg in function_args]
-        function_kwargs = {kwarg.arg: kwarg.value.value for kwarg in function_kwargs}
+        # For function_args
+        function_args_values = []
+        for arg in function_args:
+            if isinstance(arg, ast.UnaryOp) and isinstance(arg.op, ast.USub):
+                function_args_values.append(-arg.operand.value)
+            else:
+                function_args_values.append(arg.value)
+        function_args = function_args_values
+
+        # For function_kwargs
+        function_kwargs_dict = {}
+        for kwarg in function_kwargs:
+            if isinstance(kwarg.value, ast.UnaryOp) and isinstance(kwarg.value.op, ast.USub):
+                function_kwargs_dict[kwarg.arg] = -kwarg.value.operand.value
+            else:
+                function_kwargs_dict[kwarg.arg] = kwarg.value.value
+        function_kwargs = function_kwargs_dict
 
         if function_name not in self.functions:
             return FunctionResult.ERROR, f"Error: unknown command {command}. Please try again."
         
-        if len(function_args) + len(function_kwargs) != len(self.functions[function_name].call_parameters):
+        if len(function_args_values) + len(function_kwargs_dict) != len(self.functions[function_name].call_parameters):
             return FunctionResult.ERROR, self.functions[function_name].error
-
-        return self.functions[function_name].safe_call(args=function_args, kwargs=function_kwargs)   
+        
+        valid_function = self.functions[function_name]
+        return valid_function.safe_call(args=function_args_values, kwargs=function_kwargs_dict)   
     
     @property
     def help(self):
